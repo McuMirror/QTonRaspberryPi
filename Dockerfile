@@ -83,6 +83,7 @@ RUN { \
     binutils-aarch64-linux-gnu \
     libc6-arm64-cross \
     libc6-dev-arm64-cross \
+    cmake \
     glibc-source; \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*; \
@@ -90,16 +91,6 @@ RUN { \
 
 # Set the working directory to /build
 WORKDIR /build
-
-# Build and install CMake from source
-RUN ( \
-    echo "Building CMake from source" && \
-    mkdir cmakeBuild && cd cmakeBuild && \
-    git clone https://github.com/Kitware/CMake.git && \
-    cd CMake && \
-    ./bootstrap && make -j$(nproc) && make install && \
-    echo "CMake build completed"; \
- ) 2>&1 | tee -a /build.log
 
 # Create sysroot directory
 RUN mkdir sysroot sysroot/usr sysroot/opt
@@ -116,7 +107,6 @@ RUN set -e && \
     wget https://raw.githubusercontent.com/riscv/riscv-poky/master/scripts/sysroot-relativelinks.py && \
     chmod +x sysroot-relativelinks.py && \
     python3 sysroot-relativelinks.py /build/sysroot 2>&1 | tee -a /build.log
-
 
 ARG BUILD_OPENCV
 
