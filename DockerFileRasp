@@ -56,5 +56,5 @@ RUN { \
 
 WORKDIR /build
 
-# If you really want a sysroot from THIS container (Debian Trixie, not RPi OS):
+# Copy sysroot into tar
 RUN tar czf rasp.tar.gz -C / lib usr/include usr/lib etc/alternatives
