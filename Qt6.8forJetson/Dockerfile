@@ -1,234 +1,179 @@
-# Use an x86 Ubuntu base image with a specified version
+# ===============================
+# Host image (x86_64)
+# ===============================
 ARG UBUNTU_VERSION=20.04
 FROM ubuntu:${UBUNTU_VERSION}
 
-# Avoid interactive prompts by setting the environment variable
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Define build arguments for GCC version and other configurable packages
-ARG GCC_VERSION=9
+# -------------------------------
+# Build arguments
+# -------------------------------
 ARG UBUNTU_VERSION
-# Debug to confirm the build arguments
-RUN echo "DEBUG: UBUNTU_VERSION=${UBUNTU_VERSION}" && echo "DEBUG: GCC_VERSION=${GCC_VERSION}"
-
-
-# Set the argument as an environment variable
-ENV UBUNTU_VERSION=${UBUNTU_VERSION}
-
-# Set up sources.list
-RUN echo "DEBUG: UBUNTU_VERSION=${UBUNTU_VERSION}" && \
-    if [ "${UBUNTU_VERSION}" = "20.04" ]; then \
-        echo "deb http://archive.ubuntu.com/ubuntu/ focal main universe restricted multiverse" > /etc/apt/sources.list && \
-        echo "deb http://archive.ubuntu.com/ubuntu/ focal-updates main universe restricted multiverse" >> /etc/apt/sources.list && \
-        echo "deb http://archive.ubuntu.com/ubuntu/ focal-security main universe restricted multiverse" >> /etc/apt/sources.list; \
-    elif [ "${UBUNTU_VERSION}" = "18.04" ]; then \
-        echo "deb http://archive.ubuntu.com/ubuntu/ bionic main universe restricted multiverse" > /etc/apt/sources.list && \
-        echo "deb http://archive.ubuntu.com/ubuntu/ bionic-updates main universe restricted multiverse" >> /etc/apt/sources.list && \
-        echo "deb http://archive.ubuntu.com/ubuntu/ bionic-security main universe restricted multiverse" >> /etc/apt/sources.list; \
-    elif [ "${UBUNTU_VERSION}" = "22.04" ]; then \
-        echo "deb http://archive.ubuntu.com/ubuntu/ jammy main universe restricted multiverse" > /etc/apt/sources.list && \
-        echo "deb http://archive.ubuntu.com/ubuntu/ jammy-updates main universe restricted multiverse" >> /etc/apt/sources.list && \
-        echo "deb http://archive.ubuntu.com/ubuntu/ jammy-security main universe restricted multiverse" >> /etc/apt/sources.list; \
-    else \
-        echo "Unsupported Ubuntu version: ${UBUNTU_VERSION}" && exit 1; \
-    fi
-
 ARG GCC_VERSION
-ARG UBUNTU_VERSION
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    wget \
-    gnupg \
-    software-properties-common && \
-    if [ "${UBUNTU_VERSION}" = "18.04" ]; then \
-        apt-get install -y --no-install-recommends \
-        libgles2-mesa-dev \
-        gcc-${GCC_VERSION} g++-${GCC_VERSION} \
-        gcc-${GCC_VERSION}-aarch64-linux-gnu g++-${GCC_VERSION}-aarch64-linux-gnu; \
-    elif [ "${UBUNTU_VERSION}" = "20.04" ]; then \
-        apt-get install -y --no-install-recommends \
-        libgles-dev \
-        gcc-${GCC_VERSION} g++-${GCC_VERSION} \
-        gcc-${GCC_VERSION}-aarch64-linux-gnu g++-${GCC_VERSION}-aarch64-linux-gnu; \
+ENV UBUNTU_VERSION=${UBUNTU_VERSION}
+ENV GCC_VERSION=${GCC_VERSION}
+
+# -------------------------------
+# Ubuntu repositories
+# -------------------------------
+RUN if [ "${UBUNTU_VERSION}" = "20.04" ]; then \
+        CODENAME=focal; \
     elif [ "${UBUNTU_VERSION}" = "22.04" ]; then \
-        apt-get install -y --no-install-recommends \
-        libgles-dev \
-        gcc-${GCC_VERSION} g++-${GCC_VERSION} \
-        gcc-${GCC_VERSION}-aarch64-linux-gnu g++-${GCC_VERSION}-aarch64-linux-gnu; \
+        CODENAME=jammy; \
     else \
-        echo "Unsupported Ubuntu version: ${UBUNTU_VERSION}" && exit 1; \
+        echo "Unsupported Ubuntu version"; exit 1; \
     fi && \
-    apt-get install -y --no-install-recommends \
+    echo "deb http://archive.ubuntu.com/ubuntu ${CODENAME} main universe multiverse restricted" > /etc/apt/sources.list && \
+    echo "deb http://archive.ubuntu.com/ubuntu ${CODENAME}-updates main universe multiverse restricted" >> /etc/apt/sources.list && \
+    echo "deb http://archive.ubuntu.com/ubuntu ${CODENAME}-security main universe multiverse restricted" >> /etc/apt/sources.list
+
+# -------------------------------
+# Base tools + cross toolchain
+# -------------------------------
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    wget gnupg software-properties-common \
+    build-essential ninja-build \
+    gcc-${GCC_VERSION} g++-${GCC_VERSION} \
+    gcc-${GCC_VERSION}-aarch64-linux-gnu \
+    g++-${GCC_VERSION}-aarch64-linux-gnu \
+    cmake pkg-config rsync git \
+    python3 bison gperf flex \
+    libegl1-mesa-dev \
+    libgbm-dev \
+    libgl1-mesa-dev \
+    libx11-xcb-dev \
     libxrender-dev \
     libxkbcommon-dev \
     libxkbcommon-x11-dev \
     libfontconfig1-dev \
-    libx11-xcb-dev \
     libudev-dev \
-    libgl1-mesa-dev \
-    libegl1-mesa-dev \
-    libgbm-dev \
-    git \
-    bison \
-    python3 \
-    gperf \
-    pkg-config \
-    make \
-    libclang-dev \
-    build-essential \
-    ninja-build \
-    rsync \
-    sed \
     libssl-dev \
-    libgmp-dev \
-    libmpfr-dev \
-    libmpc-dev \
-    flex \
-    gawk \
-    texinfo \
-    libisl-dev \
+    libpq-dev \
     zlib1g-dev \
-    libtool \
-    autoconf \
-    automake \
-    libgdbm-dev \
-    libdb-dev \
-    libbz2-dev \
-    libreadline-dev \
-    libexpat1-dev \
-    liblzma-dev \
-    libffi-dev \
-    libsqlite3-dev \
-    libbsd-dev \
-    perl \
-    patch \
-    m4 \
-    libncurses5-dev \
-    gettext && \
-    rm -rf /var/lib/apt/lists/* && apt-get clean
+    libclang-dev \
+    gettext \
+    ca-certificates && \
+    rm -rf /var/lib/apt/lists/*
 
-# Reset the frontend variable to avoid affecting other software
-ENV DEBIAN_FRONTEND=dialog
-
-# Copy the sysroot tarball from the previous Docker image
-COPY jetsonSysroot.tar.gz /tmp/jetsonSysroot.tar.gz
-
-
-RUN { \
-    echo "Cmake build" && \
-    mkdir cmakeBuild && \
-    cd cmakeBuild && \
-    git clone https://github.com/Kitware/CMake.git && \
-    cd CMake && \
-    ./bootstrap && make -j8 && make install && \
-    echo "Cmake build is finished"; \
-} 2>&1 | tee -a /build.log
-
-# Extract the sysroot
-RUN mkdir -p /opt/sysroot && tar -xzf /tmp/jetsonSysroot.tar.gz -C /opt/sysroot | tee -a /build.log
-
-# Download and prepare the sysroot-relativelinks.py script
-RUN wget --no-check-certificate 'https://raw.githubusercontent.com/riscv/riscv-poky/master/scripts/sysroot-relativelinks.py' -O /usr/local/bin/sysroot-relativelinks.py \
- && chmod +x /usr/local/bin/sysroot-relativelinks.py \
- && python3 /usr/local/bin/sysroot-relativelinks.py /opt/sysroot | tee -a /build.log
-
-# Create necessary directories and download Qt source
-RUN mkdir -p /qt6/src /qt6/host-build /qt6/nx-build \
- && cd /qt6/src \
- && wget --no-check-certificate https://download.qt.io/official_releases/qt/6.10/6.10.1/submodules/qtbase-everywhere-src-6.10.1.tar.xz \
- && wget --no-check-certificate https://download.qt.io/official_releases/qt/6.10/6.10.1/submodules/qtshadertools-everywhere-src-6.10.1.tar.xz \
- && wget --no-check-certificate https://download.qt.io/official_releases/qt/6.10/6.10.1/submodules/qtdeclarative-everywhere-src-6.10.1.tar.xz \
- && tar xf qtbase-everywhere-src-6.10.1.tar.xz -C /qt6/host-build \
- && tar xf qtshadertools-everywhere-src-6.10.1.tar.xz -C /qt6/host-build \
- && tar xf qtdeclarative-everywhere-src-6.10.1.tar.xz -C /qt6/host-build | tee -a /build.log
-
-# Compile Qt for the host
-RUN { \
-    cd /qt6/host-build/qtbase-everywhere-src-6.10.1 && \
-    echo "Compile qtbase for host" | tee -a /build.log && \
-    cmake -GNinja -DCMAKE_BUILD_TYPE=Release -DQT_BUILD_EXAMPLES=OFF -DQT_BUILD_TESTS=OFF -DCMAKE_INSTALL_PREFIX=/qt6/host && \
-    ninja && \
-    ninja install; \
-} 2>&1 | tee -a /build.log
-
-RUN { \
-    echo "Compile qtshadertools for host" | tee -a /build.log && \
-    cd /qt6/host-build/qtshadertools-everywhere-src-6.10.1 && \
-    /qt6/host/bin/qt-configure-module . && \
-    cmake --build . --parallel 4 && \
-    cmake --install .; \
-}  2>&1 | tee -a /build.log
-
-RUN { \
-    echo "Compile qtdeclarative for host" | tee -a /build.log && \
-    cd /qt6/host-build/qtdeclarative-everywhere-src-6.10.1 && \
-    /qt6/host/bin/qt-configure-module . && \
-    cmake --build . --parallel 4 && \
-    cmake --install .; \
-} 2>&1 | tee -a /build.log
-
-# Copy the toolchain file into the Docker image
-COPY toolchain.cmake /opt/toolchain.cmake
-
-# Set environment variables for the cross-compiler
-ENV CC=aarch64-linux-gnu-gcc-9
-ENV CXX=aarch64-linux-gnu-g++-9
+# -------------------------------
+# Toolchain env
+# -------------------------------
+ENV CC=aarch64-linux-gnu-gcc-${GCC_VERSION}
+ENV CXX=aarch64-linux-gnu-g++-${GCC_VERSION}
 ENV SYSROOT=/opt/sysroot
 
-# Compile Qt for the target
-RUN cd /qt6/src && \
-    tar xf qtbase-everywhere-src-6.10.1.tar.xz -C /qt6/nx-build && \
-    tar xf qtshadertools-everywhere-src-6.10.1.tar.xz -C /qt6/nx-build && \
-    tar xf qtdeclarative-everywhere-src-6.10.1.tar.xz -C /qt6/nx-build
+# -------------------------------
+# Sysroot from Jetson image
+# -------------------------------
+COPY jetsonSysroot.tar.gz /tmp/jetsonSysroot.tar.gz
+
+RUN mkdir -p ${SYSROOT} && \
+    tar -xzf /tmp/jetsonSysroot.tar.gz -C ${SYSROOT}
+
+# Fix absolute symlinks
+RUN wget https://raw.githubusercontent.com/riscv/riscv-poky/master/scripts/sysroot-relativelinks.py \
+    -O /usr/local/bin/sysroot-relativelinks.py && \
+    chmod +x /usr/local/bin/sysroot-relativelinks.py && \
+    python3 /usr/local/bin/sysroot-relativelinks.py ${SYSROOT}
+
+# -------------------------------
+# Qt sources
+# -------------------------------
+ARG QT_VERSION=6.10.1
+
+RUN mkdir -p /qt/src /qt/host /qt/target && \
+    cd /qt/src && \
+    wget https://download.qt.io/official_releases/qt/6.10/${QT_VERSION}/submodules/qtbase-everywhere-src-${QT_VERSION}.tar.xz && \
+    wget https://download.qt.io/official_releases/qt/6.10/${QT_VERSION}/submodules/qtshadertools-everywhere-src-${QT_VERSION}.tar.xz && \
+    wget https://download.qt.io/official_releases/qt/6.10/${QT_VERSION}/submodules/qtdeclarative-everywhere-src-${QT_VERSION}.tar.xz && \
+    tar xf qtbase-everywhere-src-${QT_VERSION}.tar.xz -C /qt/host && \
+    tar xf qtshadertools-everywhere-src-${QT_VERSION}.tar.xz -C /qt/host && \
+    tar xf qtdeclarative-everywhere-src-${QT_VERSION}.tar.xz -C /qt/host
+
+# -------------------------------
+# Build Qt for host
+# -------------------------------
+RUN cd /qt/host/qtbase-everywhere-src-${QT_VERSION} && \
+    cmake -GNinja . \
+      -DCMAKE_BUILD_TYPE=Release \
+      -DCMAKE_INSTALL_PREFIX=/qt/host/install \
+      -DCMAKE_C_COMPILER=/usr/bin/gcc \
+      -DCMAKE_CXX_COMPILER=/usr/bin/g++ \
+      -DQT_BUILD_TESTS=OFF \
+      -DQT_BUILD_EXAMPLES=OFF \
+      -DQT_FEATURE_opengl=OFF && \
+    ninja && ninja install
+
+RUN cd /qt/host/qtshadertools-everywhere-src-${QT_VERSION} && \
+    /qt/host/install/bin/qt-configure-module . && \
+    cmake --build . && cmake --install .
+
+RUN cd /qt/host/qtdeclarative-everywhere-src-${QT_VERSION} && \
+    /qt/host/install/bin/qt-configure-module . && \
+    cmake --build . && cmake --install .
+
+# -------------------------------
+# Extract Qt sources for target
+# -------------------------------
+RUN tar xf /qt/src/qtbase-everywhere-src-${QT_VERSION}.tar.xz -C /qt/target && \
+    tar xf /qt/src/qtshadertools-everywhere-src-${QT_VERSION}.tar.xz -C /qt/target && \
+    tar xf /qt/src/qtdeclarative-everywhere-src-${QT_VERSION}.tar.xz -C /qt/target
+
+# -------------------------------
+# Toolchain file
+# -------------------------------
+COPY toolchain.cmake /opt/toolchain.cmake
 
 ARG GCC_VERSION
 
-# Build Qt for the target using the toolchain file
-RUN { \
-    echo "Compile qtbase for nx" | tee -a /build.log && \
-    cd /qt6/nx-build/qtbase-everywhere-src-6.10.1 && \
+
+RUN export PKG_CONFIG_SYSROOT_DIR=/opt/sysroot && \
+    export PKG_CONFIG_LIBDIR=/opt/sysroot/usr/lib/aarch64-linux-gnu/pkgconfig:/opt/sysroot/usr/share/pkgconfig && \
+    unset PKG_CONFIG_PATH && \
+    echo "PKG_CONFIG_SYSROOT_DIR=$PKG_CONFIG_SYSROOT_DIR" && \
+    pkg-config --libs xcb && \
+    pkg-config --cflags xcb && \
+    pkg-config --exists xcb && echo "XCB FOUND"
+
+# -------------------------------
+# Build Qt for Jetson (target)
+# -------------------------------
+RUN cd /qt/target/qtbase-everywhere-src-${QT_VERSION} && \
     cmake -GNinja \
-    -DCMAKE_BUILD_TYPE=Release \
-    -DINPUT_opengl=es2 \
-    -DQT_BUILD_EXAMPLES=OFF \
-    -DQT_BUILD_TESTS=OFF \
-    -DQT_HOST_PATH=/qt6/host \
-    -DCMAKE_STAGING_PREFIX=/qt6/nx \
-    -DCMAKE_INSTALL_PREFIX=/usr/local/qt6 \
-    -DCMAKE_TOOLCHAIN_FILE=/opt/toolchain.cmake \
-    -DGCC_VERSION=${GCC_VERSION} \ 
-    -DFEATURE_sql_psql=ON \
-    -DFEATURE_xcb_xlib=ON \
-    -DQT_FEATURE_xlib=ON && \
-    ninja && \
-    ninja install; \
-} 2>&1 | tee -a /build.log
+      -DCMAKE_BUILD_TYPE=Release \
+      -DCMAKE_TOOLCHAIN_FILE=/opt/toolchain.cmake \
+      -DCMAKE_SYSROOT=${SYSROOT} \
+      -DCMAKE_INSTALL_PREFIX=/qt/target/install \
+      -DQT_HOST_PATH=/qt/host/install \
+      -DGCC_VERSION=${GCC_VERSION} \
+      -DQT_BUILD_TESTS=OFF \
+      -DQT_BUILD_EXAMPLES=OFF \
+      -DQT_FEATURE_wayland=OFF \
+      -DQT_FEATURE_xcb=ON \
+      -DQT_FEATURE_xcb_xlib=ON \
+      -DQT_FEATURE_opengl=ON \
+      -DFEATURE_xcb_xlib=ON && \
+    ninja && ninja install
 
-RUN { \
-    echo "Compile qtshadertools for nx" | tee -a /build.log && \
-    cd /qt6/nx-build/qtshadertools-everywhere-src-6.10.1 && \
-    /qt6/nx/bin/qt-configure-module . && \
-    cmake --build . --parallel 4 && \
-    cmake --install .; \
-}  2>&1 | tee -a /build.log
+RUN cd /qt/target/qtshadertools-everywhere-src-${QT_VERSION} && \
+    /qt/target/install/bin/qt-configure-module . && \
+    cmake --build . && cmake --install .
 
-RUN { \
-    echo "Compile qtdeclarative for nx" | tee -a /build.log && \
-    cd /qt6/nx-build/qtdeclarative-everywhere-src-6.10.1 && \
-    /qt6/nx/bin/qt-configure-module . && \
-    cmake --build . --parallel 4 && \
-    cmake --install .; \
-} 2>&1 | tee -a /build.log
+RUN cd /qt/target/qtdeclarative-everywhere-src-${QT_VERSION} && \
+    /qt/target/install/bin/qt-configure-module . && \
+    cmake --build . && cmake --install .
 
-# Create tarball of the compiled binaries
-RUN tar -czvf qt-jetson-binaries.tar.gz -C /qt6/nx . | tee -a /build.log
+# -------------------------------
+# Package result
+# -------------------------------
+RUN tar -czf qt6-jetson-${QT_VERSION}.tar.gz -C /qt/target/install .
 
 RUN mkdir /project
 
 COPY projectQml /project
 
-RUN { \
-    cd project && \
-    /qt6/nx/bin/qt-cmake && \
-    cmake --build .; \
-}
+RUN cd /project && \
+    /qt/target/install/bin/qt-cmake . && \
+    cmake --build .
